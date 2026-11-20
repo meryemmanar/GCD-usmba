@@ -1,0 +1,2058 @@
+import React, { useState, useMemo } from 'react';
+import {
+  BookOpen,
+  UserCheck,
+  Building2,
+  ShieldCheck,
+  Settings,
+  Bell,
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
+  XCircle,
+  FileText,
+  UploadCloud,
+  ChevronRight,
+  Search,
+  Filter,
+  Eye,
+  Trash2,
+  ArrowUpDown,
+  Calendar,
+  Check,
+  X,
+  Plus,
+  Send,
+  Download,
+  AlertCircle,
+  Info,
+  User,
+  GraduationCap
+} from 'lucide-react';
+
+// ============================================================================
+// 1. TYPAGES TYPESCRIPT CONFORMES AU SCHÉMA SUPABASE
+// ============================================================================
+
+export type ProfilRole = 
+  | 'VISITEUR'
+  | 'CANDIDAT'
+  | 'DIRECTEUR_THESE'
+  | 'DIRECTEUR_STRUCTURE'
+  | 'AGENT_ADMIN'
+  | 'ADMIN_ED';
+
+export type StatutCandidature = 
+  | 'BROUILLON'
+  | 'SOUMISE'
+  | 'EN_EXAMEN'
+  | 'CORRECTION_DEMANDEE'
+  | 'ACCEPTEE'
+  | 'REFUSEE';
+
+export type StatutIdentite = 'NON_VERIFIE' | 'A_EXAMINER' | 'CONFORME' | 'NON_CONFORME';
+
+export type StatutValidationSujet = 'EN_ATTENTE' | 'VALIDE' | 'REJETE';
+
+export interface SujetThese {
+  id: string;
+  titre: string;
+  description: string;
+  nombre_places: number;
+  statut: 'PROPOSE' | 'VALIDE' | 'CLOTURE';
+  propose_par: string; // Nom Encadrant
+  encadrant_id: string;
+  structure: string; // Laboratoire / Équipe
+  etablissement: string; // FST, FS Dhar Mehraz, etc.
+  annee: number;
+  theme: string;
+  validation_structure: StatutValidationSujet;
+  validation_centre: StatutValidationSujet;
+  validation_pole: StatutValidationSujet;
+}
+
+export interface DocumentCandidat {
+  id: string;
+  type: string;
+  nom_fichier: string;
+  taille_mo: number;
+  date_depot: string;
+  obligatoire: boolean;
+  statut_verification: 'EN_ATTENTE' | 'CONFORME' | 'NON_CONFORME';
+}
+
+export interface Candidature {
+  id: string;
+  personne_id: string;
+  version_campagne_id: string;
+  candidat_nom: string;
+  candidat_prenom: string;
+  candidat_cne: string;
+  candidat_email: string;
+  date_creation: string;
+  date_soumission?: string;
+  statut: StatutCandidature;
+  choix_sujets: { priorite: number; sujet: SujetThese }[];
+  documents: DocumentCandidat[];
+  motif_correction?: string;
+  // Étape 1 : Directeur de Thèse
+  etape1?: {
+    decideur: string;
+    date_convocation?: string;
+    note?: number;
+    resultat?: 'LISTE_PRINCIPALE' | 'LISTE_ATTENTE' | 'REJETE';
+    motif_refus?: string;
+  };
+  // Étape 2 : Directeur de Structure
+  etape2?: {
+    decideur: string;
+    resultat?: 'FAVORABLE' | 'DEFAVORABLE';
+    motif?: string;
+    date_decision?: string;
+  };
+}
+
+export interface VersionCampagne {
+  id: string;
+  campagne_id: string;
+  annee_universitaire: string;
+  date_ouverture: string;
+  date_cloture: string;
+  date_modification: string;
+  motif_modification: string;
+  modifie_par: string;
+  statut: 'OUVERTE' | 'CLOTUREE';
+}
+
+export interface PersonneIdentite {
+  id: string;
+  nom: string;
+  prenom: string;
+  email: string;
+  telephone: string;
+  date_naissance: string;
+  lieu_naissance: string;
+  pays: string;
+  type_document_identite: 'CIN' | 'PASSEPORT' | 'SEJOUR';
+  numero_document_identite: string;
+  cne: string;
+  statut_identite: StatutIdentite;
+  motif_identite?: string;
+  scan_url: string;
+}
+
+// ============================================================================
+// 2. DONNÉES DE DÉMONSTRATION (USMBA FÈS)
+// ============================================================================
+
+const INITIAL_CAMPAGNE_VERSION: VersionCampagne = {
+  id: 'v-2026-1',
+  campagne_id: 'camp-2026',
+  annee_universitaire: '2026-2027',
+  date_ouverture: '2026-10-01',
+  date_cloture: '2026-12-15',
+  date_modification: '2026-10-01',
+  motif_modification: 'Lancement officiel du cycle doctoral 2026-2027',
+  modifie_par: 'Secrétariat CEDoc',
+  statut: 'OUVERTE'
+};
+
+const INITIAL_SUJETS: SujetThese[] = [
+  {
+    id: 's-1',
+    titre: "Optimisation des architectures d'apprentissage profond pour l'analyse d'images satellitaires",
+    description: "Ce projet de recherche vise à concevoir des modèles hybrides CNN-Transformers basse consommation pour la cartographie des ressources hydriques du bassin de Sebou.",
+    nombre_places: 1,
+    statut: 'VALIDE',
+    propose_par: 'Pr. Karim EL AMRANI',
+    encadrant_id: 'dt-1',
+    structure: 'Laboratoire d\'Informatique et Systèmes (LIS)',
+    etablissement: 'Faculté des Sciences Dhar El Mahraz',
+    annee: 2026,
+    theme: 'Intelligence Artificielle & Télédétection',
+    validation_structure: 'VALIDE',
+    validation_centre: 'VALIDE',
+    validation_pole: 'VALIDE'
+  },
+  {
+    id: 's-2',
+    titre: "Élaboration de nouveaux nanocomposites biosourcés pour le traitement des effluents industriels",
+    description: "Synthèse et caractérisation physico-chimique de matrices polymériques fonctionnalisées à base de biopolymères pour la dépollution textile de la région Fès-Meknès.",
+    nombre_places: 2,
+    statut: 'VALIDE',
+    propose_par: 'Pr. Samira BENKIRANE',
+    encadrant_id: 'dt-2',
+    structure: 'Laboratoire des Matériaux et Environnement',
+    etablissement: 'FST Fès',
+    annee: 2026,
+    theme: 'Chimie des Matériaux & Environnement',
+    validation_structure: 'VALIDE',
+    validation_centre: 'VALIDE',
+    validation_pole: 'VALIDE'
+  },
+  {
+    id: 's-3',
+    titre: "Mécanismes de résistance aux antibiotiques chez les souches cliniques nosocomiales",
+    description: "Étude génomique et phénotypique des déterminants de multi-résistance isolés en milieu hospitalier universitaire.",
+    nombre_places: 1,
+    statut: 'VALIDE',
+    propose_par: 'Pr. Omar TOUHAMI',
+    encadrant_id: 'dt-3',
+    structure: 'Laboratoire de Recherche Biomédicale et Thérapeutique',
+    etablissement: 'Faculté de Médecine et de Pharmacie',
+    annee: 2026,
+    theme: 'Sciences de la Santé & Génomique',
+    validation_structure: 'VALIDE',
+    validation_centre: 'VALIDE',
+    validation_pole: 'VALIDE'
+  },
+  {
+    id: 's-4',
+    titre: "Contrôle prédictif et gestion d'énergie dans les micro-réseaux renouvelables hybrides",
+    description: "Modélisation et régulation intelligente des systèmes photovoltaïques couplés à un stockage hydrogène.",
+    nombre_places: 1,
+    statut: 'PROPOSE',
+    propose_par: 'Pr. Karim EL AMRANI',
+    encadrant_id: 'dt-1',
+    structure: 'Laboratoire d\'Informatique et Systèmes (LIS)',
+    etablissement: 'Faculté des Sciences Dhar El Mahraz',
+    annee: 2026,
+    theme: 'Énergies Renouvelables & Automatique',
+    validation_structure: 'EN_ATTENTE',
+    validation_centre: 'EN_ATTENTE',
+    validation_pole: 'EN_ATTENTE'
+  }
+];
+
+const INITIAL_IDENTITES: PersonneIdentite[] = [
+  {
+    id: 'p-candidat-1',
+    nom: 'ALAMI',
+    prenom: 'Yassine',
+    email: 'yassine.alami@usmba.ac.ma',
+    telephone: '+212 661 234567',
+    date_naissance: '1999-04-12',
+    lieu_naissance: 'Fès',
+    pays: 'Maroc',
+    type_document_identite: 'CIN',
+    numero_document_identite: 'CD654321',
+    cne: 'N134567890',
+    statut_identite: 'CONFORME',
+    scan_url: 'scan_cin_cd654321.pdf'
+  },
+  {
+    id: 'p-candidat-2',
+    nom: 'BERRADA',
+    prenom: 'Fatima-Zahra',
+    email: 'fz.berrada@usmba.ac.ma',
+    telephone: '+212 662 987654',
+    date_naissance: '2000-08-23',
+    lieu_naissance: 'Meknès',
+    pays: 'Maroc',
+    type_document_identite: 'CIN',
+    numero_document_identite: 'CB897654',
+    cne: 'M142098765',
+    statut_identite: 'A_EXAMINER',
+    scan_url: 'scan_cin_cb897654.pdf'
+  }
+];
+
+const INITIAL_CANDIDATURES: Candidature[] = [
+  {
+    id: 'cand-001',
+    personne_id: 'p-candidat-1',
+    version_campagne_id: 'v-2026-1',
+    candidat_nom: 'ALAMI',
+    candidat_prenom: 'Yassine',
+    candidat_cne: 'N134567890',
+    candidat_email: 'yassine.alami@usmba.ac.ma',
+    date_creation: '2026-10-10',
+    date_soumission: '2026-10-15',
+    statut: 'EN_EXAMEN',
+    choix_sujets: [
+      { priorite: 1, sujet: INITIAL_SUJETS[0] },
+      { priorite: 2, sujet: INITIAL_SUJETS[1] }
+    ],
+    documents: [
+      { id: 'd-1', type: 'Diplôme de Master / Ingénieur', nom_fichier: 'Diplome_Master_Alami.pdf', taille_mo: 2.1, date_depot: '2026-10-12', obligatoire: true, statut_verification: 'CONFORME' },
+      { id: 'd-2', type: 'Relevés de notes Master (S1-S4)', nom_fichier: 'Releves_Notes_S1_S4.pdf', taille_mo: 3.4, date_depot: '2026-10-12', obligatoire: true, statut_verification: 'CONFORME' },
+      { id: 'd-3', type: 'Projet de recherche rédigé', nom_fichier: 'Projet_These_Alami_v1.pdf', taille_mo: 1.8, date_depot: '2026-10-14', obligatoire: true, statut_verification: 'CONFORME' },
+      { id: 'd-4', type: 'Curriculum Vitae détaillé', nom_fichier: 'CV_Alami_Yassine.pdf', taille_mo: 0.9, date_depot: '2026-10-14', obligatoire: true, statut_verification: 'CONFORME' },
+      { id: 'd-5', type: 'Attestation de réussite Licence', nom_fichier: 'Attestation_Licence.pdf', taille_mo: 1.2, date_depot: '2026-10-15', obligatoire: false, statut_verification: 'CONFORME' }
+    ]
+  },
+  {
+    id: 'cand-002',
+    personne_id: 'p-candidat-2',
+    version_campagne_id: 'v-2026-1',
+    candidat_nom: 'BERRADA',
+    candidat_prenom: 'Fatima-Zahra',
+    candidat_cne: 'M142098765',
+    candidat_email: 'fz.berrada@usmba.ac.ma',
+    date_creation: '2026-10-18',
+    statut: 'BROUILLON',
+    choix_sujets: [
+      { priorite: 1, sujet: INITIAL_SUJETS[0] }
+    ],
+    documents: [
+      { id: 'd-6', type: 'Diplôme de Master / Ingénieur', nom_fichier: 'Diplome_Master_FST.pdf', taille_mo: 2.4, date_depot: '2026-10-19', obligatoire: true, statut_verification: 'EN_ATTENTE' },
+      { id: 'd-7', type: 'Relevés de notes Master (S1-S4)', nom_fichier: 'Releves_Notes.pdf', taille_mo: 4.1, date_depot: '2026-10-19', obligatoire: true, statut_verification: 'EN_ATTENTE' }
+      // Documents obligatoires manquants : Projet de recherche & CV
+    ]
+  }
+];
+
+// ============================================================================
+// 3. COMPOSANTS D'AIDE & BADGES DE STATUT
+// ============================================================================
+
+export const StatutBadge: React.FC<{ statut: StatutCandidature }> = ({ statut }) => {
+  const styles: Record<StatutCandidature, string> = {
+    BROUILLON: 'bg-slate-100 text-slate-700 border-slate-300',
+    SOUMISE: 'bg-sky-50 text-sky-700 border-sky-300',
+    EN_EXAMEN: 'bg-indigo-50 text-indigo-700 border-indigo-300',
+    CORRECTION_DEMANDEE: 'bg-amber-50 text-amber-700 border-amber-300',
+    ACCEPTEE: 'bg-emerald-50 text-emerald-700 border-emerald-300',
+    REFUSEE: 'bg-rose-50 text-rose-700 border-rose-300'
+  };
+
+  const labels: Record<StatutCandidature, string> = {
+    BROUILLON: 'Brouillon',
+    SOUMISE: 'Soumise',
+    EN_EXAMEN: 'En examen',
+    CORRECTION_DEMANDEE: 'Correction demandée',
+    ACCEPTEE: 'Acceptée (Admis)',
+    REFUSEE: 'Refusée'
+  };
+
+  return (
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${styles[statut]}`}>
+      {labels[statut]}
+    </span>
+  );
+};
+
+export const ValidationPill: React.FC<{ label: string; statut: StatutValidationSujet }> = ({ label, statut }) => {
+  const isValide = statut === 'VALIDE';
+  const isEnAttente = statut === 'EN_ATTENTE';
+  return (
+    <div className={`text-[11px] px-2 py-0.5 rounded border inline-flex items-center gap-1 font-medium ${
+      isValide ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+      isEnAttente ? 'bg-amber-50 text-amber-800 border-amber-200' :
+      'bg-rose-50 text-rose-800 border-rose-200'
+    }`}>
+      <span className="font-bold">{label}:</span> {isValide ? 'Validé' : isEnAttente ? 'En attente' : 'Rejeté'}
+    </div>
+  );
+};
+
+// ============================================================================
+// 4. APPLICATION PRINCIPALE & NAVIGATION
+// ============================================================================
+
+export default function App() {
+  const [currentRole, setCurrentRole] = useState<ProfilRole>('VISITEUR');
+  const [campagneVersion, setCampagneVersion] = useState<VersionCampagne>(INITIAL_CAMPAGNE_VERSION);
+  const [sujets, setSujets] = useState<SujetThese[]>(INITIAL_SUJETS);
+  const [candidatures, setCandidatures] = useState<Candidature[]>(INITIAL_CANDIDATURES);
+  const [personnes, setPersonnes] = useState<PersonneIdentite[]>(INITIAL_IDENTITES);
+  
+  // Panier visiteur (sélection temporaire : max 3)
+  const [panierSujets, setPanierSujets] = useState<SujetThese[]>([]);
+  const [selectedSujetDetail, setSelectedSujetDetail] = useState<SujetThese | null>(null);
+  const [notifications, setNotifications] = useState<string[]>([
+    "Ouverture officielle du portail des candidatures doctorales 2026-2027.",
+    "Rappel : Signature manuscrite obligatoire sur les fiches de dépôt."
+  ]);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+
+  // Transitions d'état autorisées (State Machine Strict)
+  const updateCandidatureStatut = (id: string, newStatut: StatutCandidature, extra?: Partial<Candidature>) => {
+    setCandidatures(prev => prev.map(c => {
+      if (c.id !== id) return c;
+      return {
+        ...c,
+        statut: newStatut,
+        ...extra
+      };
+    }));
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans">
+      {/* 4.1 HEADER DE NAVIGATION AVEC RBAC DEMO */}
+      <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            
+            {/* Logo Institutionnel */}
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 bg-blue-700 rounded-lg flex items-center justify-center font-bold text-lg shadow-sm border border-blue-500">
+                USMBA
+              </div>
+              <div>
+                <span className="font-bold text-base tracking-tight text-white block">GCD Doctorat</span>
+                <span className="text-[11px] text-slate-400 block -mt-0.5">Centre des Études Doctorales</span>
+              </div>
+            </div>
+
+            {/* Commutateur de Rôle (RBAC Simulator) */}
+            <div className="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
+              <User className="w-4 h-4 text-blue-400" />
+              <span className="text-xs text-slate-300 font-medium hidden sm:inline">Rôle actif :</span>
+              <select 
+                value={currentRole} 
+                onChange={(e) => setCurrentRole(e.target.value as ProfilRole)}
+                className="bg-slate-900 text-xs font-semibold text-white px-2 py-1 rounded border border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="VISITEUR">Visiteur (Public)</option>
+                <option value="CANDIDAT">Candidat (D1)</option>
+                <option value="DIRECTEUR_THESE">Directeur de Thèse (Encadrant)</option>
+                <option value="DIRECTEUR_STRUCTURE">Directeur de Structure</option>
+                <option value="AGENT_ADMIN">Agent Administratif (Identité)</option>
+                <option value="ADMIN_ED">Administrateur ED (Campagnes)</option>
+              </select>
+            </div>
+
+            {/* Notifications & Statut Campagne */}
+            <div className="flex items-center gap-3">
+              <div className="hidden md:flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-950/60 px-2.5 py-1 rounded border border-emerald-800">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                Campagne {campagneVersion.annee_universitaire} (Ouverte)
+              </div>
+
+              <div className="relative">
+                <button 
+                  onClick={() => setIsNotifOpen(!isNotifOpen)}
+                  className="p-2 text-slate-300 hover:text-white rounded-lg hover:bg-slate-800 relative transition-colors"
+                >
+                  <Bell className="w-5 h-5" />
+                  {notifications.length > 0 && (
+                    <span className="absolute top-1 right-1 h-4 w-4 bg-blue-600 rounded-full text-[10px] font-bold flex items-center justify-center text-white">
+                      {notifications.length}
+                    </span>
+                  )}
+                </button>
+
+                {isNotifOpen && (
+                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-slate-200 py-2 text-slate-900 z-50">
+                    <div className="px-4 py-2 border-b border-slate-100 font-semibold text-xs text-slate-700 flex justify-between items-center">
+                      <span>Notifications récentes</span>
+                      <button onClick={() => setNotifications([])} className="text-slate-400 hover:text-slate-600 text-[11px]">Effacer</button>
+                    </div>
+                    {notifications.length === 0 ? (
+                      <div className="px-4 py-4 text-xs text-slate-500 text-center">Aucune notification</div>
+                    ) : (
+                      notifications.map((msg, i) => (
+                        <div key={i} className="px-4 py-2 text-xs border-b border-slate-50 hover:bg-slate-50">
+                          {msg}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </header>
+
+      {/* 4.2 BANDEAU D'INFORMATION D'AUTHENTIFICATION SIMULÉE */}
+      <div className="bg-blue-900 text-blue-100 text-xs py-1.5 px-4 text-center border-b border-blue-800 flex items-center justify-center gap-2">
+        <Info className="w-3.5 h-3.5 text-blue-300" />
+        <span>Vue active : <strong>{currentRole}</strong> &bull; Plateforme sécurisée Supabase RBAC avec isolation des données.</span>
+      </div>
+
+      {/* 4.3 CONTENU PRINCIPAL SELON LE RÔLE */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+        {currentRole === 'VISITEUR' && (
+          <VueVisiteur 
+            sujets={sujets.filter(s => s.statut === 'VALIDE')} 
+            panierSujets={panierSujets}
+            setPanierSujets={setPanierSujets}
+            onSelectSujetDetail={setSelectedSujetDetail}
+            onNavigateCandidat={() => setCurrentRole('CANDIDAT')}
+          />
+        )}
+
+        {currentRole === 'CANDIDAT' && (
+          <VueCandidat 
+            candidature={candidatures[0]} 
+            onResoumettre={(id) => updateCandidatureStatut(id, 'EN_EXAMEN')}
+            onSoumettreBrouillon={(id) => updateCandidatureStatut(id, 'SOUMISE', { date_soumission: new Date().toISOString().split('T')[0] })}
+          />
+        )}
+
+        {currentRole === 'DIRECTEUR_THESE' && (
+          <VueDirecteurThese 
+            sujets={sujets} 
+            candidatures={candidatures}
+            onUpdateStatut={updateCandidatureStatut}
+            onAjouterSujet={(nouveau) => setSujets([nouveau, ...sujets])}
+          />
+        )}
+
+        {currentRole === 'DIRECTEUR_STRUCTURE' && (
+          <VueDirecteurStructure 
+            sujets={sujets} 
+            candidatures={candidatures}
+            onValiderSujet={(id) => {
+              setSujets(prev => prev.map(s => s.id === id ? { ...s, validation_structure: 'VALIDE', statut: 'VALIDE' } : s));
+            }}
+            onDecisionEtape2={(candId, resultat, motif) => {
+              updateCandidatureStatut(
+                candId,
+                resultat === 'FAVORABLE' ? 'ACCEPTEE' : 'REFUSEE',
+                {
+                  etape2: {
+                    decideur: 'Directeur du Laboratoire LIS',
+                    resultat,
+                    motif,
+                    date_decision: new Date().toISOString().split('T')[0]
+                  }
+                }
+              );
+            }}
+          />
+        )}
+
+        {currentRole === 'AGENT_ADMIN' && (
+          <VueAgentAdmin 
+            personnes={personnes}
+            onValiderIdentite={(id, decision, motif) => {
+              setPersonnes(prev => prev.map(p => p.id === id ? {
+                ...p,
+                statut_identite: decision,
+                motif_identite: motif
+              } : p));
+            }}
+          />
+        )}
+
+        {currentRole === 'ADMIN_ED' && (
+          <VueAdminED 
+            campagneVersion={campagneVersion}
+            onCreerNouvelleVersion={(nvl) => setCampagneVersion(nvl)}
+          />
+        )}
+      </main>
+
+      {/* MODAL FICHE DÉTAIL D'UN SUJET DE THÈSE (ACCESSIBLE TOUT RÔLE) */}
+      {selectedSujetDetail && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-2xl rounded-xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="bg-slate-900 px-6 py-4 flex items-center justify-between text-white">
+              <div>
+                <span className="text-xs text-blue-400 font-semibold tracking-wide uppercase">{selectedSujetDetail.theme}</span>
+                <h3 className="text-base font-bold leading-snug">{selectedSujetDetail.titre}</h3>
+              </div>
+              <button onClick={() => setSelectedSujetDetail(null)} className="text-slate-400 hover:text-white p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4 text-sm text-slate-700">
+              <div className="grid grid-cols-2 gap-3 text-xs bg-slate-50 p-3 rounded-lg border border-slate-100">
+                <div><span className="font-semibold text-slate-900">Encadrant :</span> {selectedSujetDetail.propose_par}</div>
+                <div><span className="font-semibold text-slate-900">Places :</span> {selectedSujetDetail.nombre_places}</div>
+                <div><span className="font-semibold text-slate-900">Laboratoire :</span> {selectedSujetDetail.structure}</div>
+                <div><span className="font-semibold text-slate-900">Établissement :</span> {selectedSujetDetail.etablissement}</div>
+              </div>
+              <div>
+                <h4 className="font-semibold text-slate-900 mb-1">Description détaillée du projet :</h4>
+                <p className="leading-relaxed text-slate-600 text-xs sm:text-sm">{selectedSujetDetail.description}</p>
+              </div>
+            </div>
+            <div className="bg-slate-50 px-6 py-3 border-t border-slate-100 flex justify-end">
+              <button 
+                onClick={() => setSelectedSujetDetail(null)}
+                className="px-4 py-2 bg-slate-800 text-white rounded-lg text-xs font-semibold hover:bg-slate-700"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FOOTER ACADÉMIQUE */}
+      <footer className="bg-slate-900 border-t border-slate-800 text-slate-400 py-6 text-xs text-center mt-auto">
+        <p>Université Sidi Mohamed Ben Abdellah de Fès &bull; Centre des Études Doctorales (CEDoc)</p>
+        <p className="text-slate-500 text-[11px] mt-1">Conforme à la réglementation nationale des inscriptions doctorales &bull; Signature manuscrite requise sur pièces contractuelles</p>
+      </footer>
+    </div>
+  );
+}
+
+// ============================================================================
+// 5. VUE 1 : VISITEUR (PUBLIC) & PANIER DES SUJETS (MAX 3)
+// ============================================================================
+
+interface VueVisiteurProps {
+  sujets: SujetThese[];
+  panierSujets: SujetThese[];
+  setPanierSujets: React.Dispatch<React.SetStateAction<SujetThese[]>>;
+  onSelectSujetDetail: (sujet: SujetThese) => void;
+  onNavigateCandidat: () => void;
+}
+
+const VueVisiteur: React.FC<VueVisiteurProps> = ({
+  sujets,
+  panierSujets,
+  setPanierSujets,
+  onSelectSujetDetail,
+  onNavigateCandidat
+}) => {
+  const [recherche, setRecherche] = useState('');
+  const [filtreEtablissement, setFiltreEtablissement] = useState('TOUS');
+
+  const sujetsFiltres = sujets.filter(s => {
+    const matchTxt = s.titre.toLowerCase().includes(recherche.toLowerCase()) || 
+                     s.propose_par.toLowerCase().includes(recherche.toLowerCase()) ||
+                     s.theme.toLowerCase().includes(recherche.toLowerCase());
+    const matchEtab = filtreEtablissement === 'TOUS' || s.etablissement === filtreEtablissement;
+    return matchTxt && matchEtab;
+  });
+
+  const ajouterAuPanier = (sujet: SujetThese) => {
+    if (panierSujets.length >= 3) {
+      alert("Attention : Le système autorise un maximum de 3 choix priorisés par candidat.");
+      return;
+    }
+    if (panierSujets.some(s => s.id === sujet.id)) return;
+    setPanierSujets([...panierSujets, sujet]);
+  };
+
+  const retirerDuPanier = (id: string) => {
+    setPanierSujets(panierSujets.filter(s => s.id !== id));
+  };
+
+  const deplacerPriorite = (index: number, direction: 'UP' | 'DOWN') => {
+    const newArr = [...panierSujets];
+    const targetIdx = direction === 'UP' ? index - 1 : index + 1;
+    if (targetIdx < 0 || targetIdx >= newArr.length) return;
+    const temp = newArr[index];
+    newArr[index] = newArr[targetIdx];
+    newArr[targetIdx] = temp;
+    setPanierSujets(newArr);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* En-tête de bienvenue */}
+      <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white rounded-2xl p-6 sm:p-8 shadow-md">
+        <div className="max-w-3xl space-y-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-800/80 text-blue-200 text-xs font-semibold">
+            <GraduationCap className="w-4 h-4" /> Appel à candidatures 2026-2027
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Catalogue des Sujets de Thèse Validés</h1>
+          <p className="text-slate-300 text-sm">
+            Consultez les sujets proposés par les structures de recherche de l'USMBA. Retenez de 1 à 3 sujets ordonnés selon vos priorités de recherche avant de finaliser votre inscription.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Colonne Principale : Liste et Filtres (2 tiers) */}
+        <div className="lg:col-span-2 space-y-4">
+          
+          {/* Barre d'outils de recherche */}
+          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="Rechercher par mot-clé, thème, encadrant..." 
+                value={recherche}
+                onChange={(e) => setRecherche(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-slate-400 hidden sm:block" />
+              <select 
+                value={filtreEtablissement}
+                onChange={(e) => setFiltreEtablissement(e.target.value)}
+                className="text-xs sm:text-sm py-2 px-3 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="TOUS">Tous les établissements</option>
+                <option value="Faculté des Sciences Dhar El Mahraz">FS Dhar El Mahraz</option>
+                <option value="FST Fès">FST Fès</option>
+                <option value="Faculté de Médecine et de Pharmacie">FMP Fès</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Liste des cartes sujets */}
+          <div className="space-y-3">
+            {sujetsFiltres.length === 0 ? (
+              <div className="bg-white p-8 rounded-xl border border-slate-200 text-center text-slate-500 text-sm">
+                Aucun sujet ne correspond aux critères sélectionnés.
+              </div>
+            ) : (
+              sujetsFiltres.map((sujet) => {
+                const estSelectionne = panierSujets.some(s => s.id === sujet.id);
+                return (
+                  <div key={sujet.id} className="bg-white p-5 rounded-xl border border-slate-200 hover:border-blue-400 shadow-sm transition-all flex flex-col justify-between gap-4">
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded border border-blue-100">
+                          {sujet.theme}
+                        </span>
+                        <span className="text-[11px] text-slate-500 font-medium">
+                          {sujet.etablissement} &bull; {sujet.nombre_places} place(s)
+                        </span>
+                      </div>
+                      <h3 className="font-bold text-slate-900 text-base leading-snug">
+                        {sujet.titre}
+                      </h3>
+                      <p className="text-slate-600 text-xs line-clamp-2">
+                        {sujet.description}
+                      </p>
+                      <div className="text-xs text-slate-500 pt-1">
+                        Encadrant proposé : <strong className="text-slate-800">{sujet.propose_par}</strong> ({sujet.structure})
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                      <button 
+                        onClick={() => onSelectSujetDetail(sujet)}
+                        className="text-xs text-slate-600 hover:text-blue-700 font-medium inline-flex items-center gap-1"
+                      >
+                        <Eye className="w-4 h-4" /> Consulter le descriptif
+                      </button>
+
+                      <button
+                        onClick={() => ajouterAuPanier(sujet)}
+                        disabled={estSelectionne || panierSujets.length >= 3}
+                        className={`text-xs px-3.5 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition-colors ${
+                          estSelectionne 
+                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                            : panierSujets.length >= 3
+                              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                              : 'bg-blue-700 text-white hover:bg-blue-800 shadow-sm'
+                        }`}
+                      >
+                        {estSelectionne ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" /> Retenu dans vos choix
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="w-3.5 h-3.5" /> Choisir ce sujet
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* Colonne Latérale : Panier "Mes Choix de Sujets" (1 tiers) */}
+        <div className="space-y-4">
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm sticky top-24">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h2 className="font-bold text-slate-900 text-sm">Mes Choix de Sujets</h2>
+                <p className="text-[11px] text-slate-500">Priorisation requise (1 à 3 max)</p>
+              </div>
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                panierSujets.length > 0 ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-600'
+              }`}>
+                {panierSujets.length} / 3
+              </span>
+            </div>
+
+            {panierSujets.length === 0 ? (
+              <div className="py-8 text-center text-slate-400 text-xs space-y-2">
+                <BookOpen className="w-8 h-8 mx-auto text-slate-300 stroke-[1.5]" />
+                <p>Aucun sujet sélectionné pour le moment.<br />Cliquez sur "Choisir ce sujet" pour composer votre dossier.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100 py-3 space-y-3">
+                {panierSujets.map((s, idx) => (
+                  <div key={s.id} className="pt-2 text-xs space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded text-[11px]">
+                        Priorité {idx + 1}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button 
+                          onClick={() => deplacerPriorite(idx, 'UP')}
+                          disabled={idx === 0}
+                          className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20"
+                          title="Monter la priorité"
+                        >
+                          <ArrowUpDown className="w-3.5 h-3.5" />
+                        </button>
+                        <button 
+                          onClick={() => retirerDuPanier(s.id)}
+                          className="p-1 text-rose-500 hover:text-rose-700"
+                          title="Supprimer du panier"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    <p className="font-semibold text-slate-800 leading-snug">{s.titre}</p>
+                    <p className="text-[11px] text-slate-500">{s.propose_par}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="pt-4 border-t border-slate-100 space-y-2">
+              <button
+                disabled={panierSujets.length === 0}
+                onClick={onNavigateCandidat}
+                className="w-full py-2.5 bg-blue-700 hover:bg-blue-800 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow"
+              >
+                Valider ma sélection &amp; Postuler
+                <ChevronRight className="w-4 h-4" />
+              </button>
+              <p className="text-[10px] text-slate-400 text-center">
+                Les choix pourront être ajustés dans l'espace candidat avant soumission définitive.
+              </p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// 6. VUE 2 : ESPACE CANDIDAT (TABLEAU DE BORD, JAUGE & SOUMISSION)
+// ============================================================================
+
+interface VueCandidatProps {
+  candidature: Candidature;
+  onResoumettre: (id: string) => void;
+  onSoumettreBrouillon: (id: string) => void;
+}
+
+const VueCandidat: React.FC<VueCandidatProps> = ({
+  candidature,
+  onResoumettre,
+  onSoumettreBrouillon
+}) => {
+  const [activeTab, setActiveTab] = useState<'SYNTHESE' | 'PIECES' | 'DOCS_GENERES'>('SYNTHESE');
+
+  // Documents obligatoires exigés par l'USMBA
+  const docsExiges = [
+    'Diplôme de Master / Ingénieur',
+    'Relevés de notes Master (S1-S4)',
+    'Projet de recherche rédigé',
+    'Curriculum Vitae détaillé'
+  ];
+
+  const docsPresentsTypes = candidature.documents.map(d => d.type);
+  const obligatoiresFournis = docsExiges.filter(docType => docsPresentsTypes.includes(docType));
+  const nbObligatoiresFournis = obligatoiresFournis.length;
+  const totalObligatoires = docsExiges.length;
+  const toutEstPret = nbObligatoiresFournis === totalObligatoires;
+
+  return (
+    <div className="space-y-6">
+      
+      {/* Header Fiche Candidat */}
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-slate-900">
+              Dossier Doctorat D1 : {candidature.candidat_prenom} {candidature.candidat_nom}
+            </h1>
+            <StatutBadge statut={candidature.statut} />
+          </div>
+          <p className="text-xs text-slate-500 mt-1">
+            CNE : <span className="font-mono font-semibold">{candidature.candidat_cne}</span> &bull; Référence : <span className="font-mono">{candidature.id}</span>
+          </p>
+        </div>
+
+        {/* Action de resoumission si correction demandée */}
+        {candidature.statut === 'CORRECTION_DEMANDEE' && (
+          <div className="flex items-center gap-3 bg-amber-50 p-3 rounded-lg border border-amber-200">
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+            <div className="text-xs text-amber-900">
+              <span className="font-bold">Complément exigé :</span> {candidature.motif_correction}
+            </div>
+            <button
+              onClick={() => onResoumettre(candidature.id)}
+              className="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 shadow-sm"
+            >
+              Resoumettre le dossier
+            </button>
+          </div>
+        )}
+
+        {candidature.statut === 'BROUILLON' && (
+          <button
+            onClick={() => onSoumettreBrouillon(candidature.id)}
+            disabled={!toutEstPret}
+            title={!toutEstPret ? "Toutes les pièces obligatoires doivent être téléversées." : ""}
+            className="bg-blue-700 hover:bg-blue-800 disabled:bg-slate-200 disabled:text-slate-400 text-white px-4 py-2 rounded-lg text-xs font-bold transition shadow-sm flex items-center gap-2"
+          >
+            <Send className="w-3.5 h-3.5" /> Soumettre définitivement ma candidature
+          </button>
+        )}
+      </div>
+
+      {/* Onglets de navigation candidat */}
+      <div className="flex border-b border-slate-200 gap-6 text-sm font-semibold">
+        <button
+          onClick={() => setActiveTab('SYNTHESE')}
+          className={`pb-3 border-b-2 transition-colors ${activeTab === 'SYNTHESE' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Synthèse &amp; Suivi D1
+        </button>
+        <button
+          onClick={() => setActiveTab('PIECES')}
+          className={`pb-3 border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'PIECES' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Dépôt des Pièces Justificatives
+          <span className={`text-[11px] px-2 py-0.5 rounded-full ${toutEstPret ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+            {nbObligatoiresFournis}/{totalObligatoires}
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveTab('DOCS_GENERES')}
+          className={`pb-3 border-b-2 transition-colors ${activeTab === 'DOCS_GENERES' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Formulaires &amp; Récépissés PDF
+        </button>
+      </div>
+
+      {/* TAB 1: SYNTHÈSE & TIMELINE D1 */}
+      {activeTab === 'SYNTHESE' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="md:col-span-2 space-y-6">
+            
+            {/* Timeline des étapes */}
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wide">Parcours de Candidature D1</h2>
+              
+              <div className="space-y-6 relative before:absolute before:inset-0 before:left-3.5 before:w-0.5 before:bg-slate-200">
+                {/* Étape 1 : Dépôt */}
+                <div className="relative flex items-start gap-4">
+                  <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-xs z-10 ${
+                    candidature.statut !== 'BROUILLON' ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white'
+                  }`}>
+                    1
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-900">Dépôt du dossier en ligne</h3>
+                    <p className="text-[11px] text-slate-500">Sélection des sujets et pièces justificatives (max 5Mo).</p>
+                    <span className="text-[10px] text-slate-400">Créé le {candidature.date_creation}</span>
+                  </div>
+                </div>
+
+                {/* Étape 2 : Examen Encadrant */}
+                <div className="relative flex items-start gap-4">
+                  <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-xs z-10 ${
+                    ['EN_EXAMEN', 'ACCEPTEE'].includes(candidature.statut) ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'
+                  }`}>
+                    2
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-900">Étape 1 : Examen Directeur de Thèse</h3>
+                    <p className="text-[11px] text-slate-500">Étude de recevabilité, audition/entretien oral et note d'évaluation.</p>
+                    {candidature.etape1 && (
+                      <div className="mt-1 text-xs bg-slate-50 p-2 rounded border border-slate-200">
+                        <div>Résultat : <strong className="text-blue-800">{candidature.etape1.resultat}</strong></div>
+                        {candidature.etape1.note && <div>Note attribuée : <strong>{candidature.etape1.note} / 20</strong></div>}
+                        {candidature.etape1.date_convocation && <div>Entretien programmé le : <strong>{candidature.etape1.date_convocation}</strong></div>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Étape 3 : Décision Structure */}
+                <div className="relative flex items-start gap-4">
+                  <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-xs z-10 ${
+                    candidature.statut === 'ACCEPTEE' ? 'bg-emerald-600 text-white' :
+                    candidature.statut === 'REFUSEE' ? 'bg-rose-600 text-white' : 'bg-slate-200 text-slate-600'
+                  }`}>
+                    3
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-900">Étape 2 : Décision Finale Structure de Recherche</h3>
+                    <p className="text-[11px] text-slate-500">Validation par le Directeur du Laboratoire pour inscription définitive.</p>
+                    {candidature.etape2 && (
+                      <div className="mt-1 text-xs bg-slate-50 p-2 rounded border border-slate-200">
+                        <div>Décision : <strong className={candidature.etape2.resultat === 'FAVORABLE' ? 'text-emerald-700' : 'text-rose-700'}>{candidature.etape2.resultat}</strong></div>
+                        {candidature.etape2.motif && <div>Motif : {candidature.etape2.motif}</div>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Sujets Choisis */}
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-3">
+              <h2 className="text-sm font-bold text-slate-900">Sujets Priorisés dans ce Dossier</h2>
+              <div className="divide-y divide-slate-100">
+                {candidature.choix_sujets.map((cs) => (
+                  <div key={cs.sujet.id} className="py-2.5 flex items-start justify-between gap-3 text-xs">
+                    <div>
+                      <span className="font-bold text-blue-700 mr-2">Choix n°{cs.priorite} :</span>
+                      <span className="font-semibold text-slate-900">{cs.sujet.titre}</span>
+                      <p className="text-slate-500 text-[11px] mt-0.5">{cs.sujet.propose_par} &bull; {cs.sujet.structure}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
+
+          {/* Colonne latérale Candidat : Jauge & Résumé */}
+          <div className="space-y-4">
+            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Complétude du dossier</h3>
+              
+              {/* Jauge Visuelle */}
+              <div>
+                <div className="flex justify-between text-xs font-semibold mb-1">
+                  <span>Pièces fournies</span>
+                  <span className={toutEstPret ? 'text-emerald-700' : 'text-amber-700'}>
+                    {nbObligatoiresFournis} / {totalObligatoires} obligatoires
+                  </span>
+                </div>
+                <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full transition-all duration-300 ${toutEstPret ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                    style={{ width: `${(nbObligatoiresFournis / totalObligatoires) * 100}%` }}
+                  />
+                </div>
+              </div>
+
+              {!toutEstPret && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 space-y-1">
+                  <span className="font-bold">Pièces obligatoires en attente :</span>
+                  <ul className="list-disc pl-4 space-y-0.5 text-[11px]">
+                    {docsExiges.filter(t => !docsPresentsTypes.includes(t)).map((t, idx) => (
+                      <li key={idx}>{t}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: DÉPÔT DES PIÈCES JUSTIFICATIVES */}
+      {activeTab === 'PIECES' && (
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6">
+          <div>
+            <h2 className="text-base font-bold text-slate-900">Documents Justificatifs Requis</h2>
+            <p className="text-xs text-slate-500">Formats acceptés : PDF, JPG, PNG (Taille max par fichier : 5 Mo).</p>
+          </div>
+
+          {/* Zone Drag & Drop de dépôt */}
+          <div className="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl p-8 text-center bg-slate-50/50 hover:bg-blue-50/20 transition-colors cursor-pointer">
+            <UploadCloud className="w-10 h-10 text-slate-400 mx-auto mb-2" />
+            <p className="text-xs font-semibold text-slate-800">Cliquez pour téléverser ou glissez-déposez vos fichiers</p>
+            <p className="text-[11px] text-slate-500 mt-1">Conformité contrôlée manuellement par l'agent administratif du CEDoc.</p>
+          </div>
+
+          {/* Table des pièces fournies */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-3">Type de document</th>
+                  <th className="py-2.5 px-3">Nom du fichier</th>
+                  <th className="py-2.5 px-3">Taille</th>
+                  <th className="py-2.5 px-3">Date de dépôt</th>
+                  <th className="py-2.5 px-3">Statut conformité</th>
+                  <th className="py-2.5 px-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {candidature.documents.map((doc) => (
+                  <tr key={doc.id} className="hover:bg-slate-50/50">
+                    <td className="py-2.5 px-3 font-semibold text-slate-800">
+                      {doc.type} {doc.obligatoire && <span className="text-rose-500">*</span>}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-600 font-mono text-[11px]">{doc.nom_fichier}</td>
+                    <td className="py-2.5 px-3 text-slate-500">{doc.taille_mo} Mo</td>
+                    <td className="py-2.5 px-3 text-slate-500">{doc.date_depot}</td>
+                    <td className="py-2.5 px-3">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                        doc.statut_verification === 'CONFORME' ? 'bg-emerald-100 text-emerald-800' :
+                        doc.statut_verification === 'NON_CONFORME' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700'
+                      }`}>
+                        {doc.statut_verification}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-right">
+                      <button className="text-blue-600 hover:text-blue-800 font-semibold mr-2">Voir</button>
+                      {candidature.statut === 'BROUILLON' && (
+                        <button className="text-rose-600 hover:text-rose-800">Supprimer</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: FORMULAIRES & RÉCÉPISSÉS PDF PRÉ-REMPLIS */}
+      {activeTab === 'DOCS_GENERES' && (
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+          <div>
+            <h2 className="text-base font-bold text-slate-900">Formulaires Officiels Pré-remplis</h2>
+            <p className="text-xs text-slate-500">
+              Ces documents contractuels doivent être téléchargés, imprimés et comporter une <strong>signature manuscrite</strong> obligatoire.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+            {[
+              {
+                titre: "Fiche d'Inscription D1",
+                desc: "Données administratives, choix de sujets priorisés et engagement sur l'honneur.",
+                code: "FORM-F1"
+              },
+              {
+                titre: "Charte des Thèses de l'USMBA",
+                desc: "Droits et devoirs du doctorant et des directeurs de laboratoire.",
+                code: "CHARTE-D"
+              },
+              {
+                titre: "Récépissé de Dépôt de Candidature",
+                desc: "Preuve horodatée de la soumission de votre dossier pour l'année 2026-2027.",
+                code: "REC-2026"
+              }
+            ].map((form, idx) => (
+              <div key={idx} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between space-y-3">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <FileText className="w-5 h-5 text-blue-700" />
+                    <span className="text-[10px] font-mono text-slate-400">{form.code}</span>
+                  </div>
+                  <h3 className="font-bold text-slate-900 text-xs">{form.titre}</h3>
+                  <p className="text-[11px] text-slate-500">{form.desc}</p>
+                </div>
+                <div className="pt-2 border-t border-slate-200/60">
+                  <button 
+                    onClick={() => alert(`Téléchargement du document ${form.titre} (Format PDF avec mention "Signature manuscrite requise").`)}
+                    className="w-full py-1.5 bg-white border border-slate-300 hover:border-blue-600 text-slate-700 hover:text-blue-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Télécharger PDF
+                  </button>
+                  <span className="text-[10px] text-amber-700 block text-center mt-1 font-medium">Signature manuscrite requise</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};
+
+// ============================================================================
+// 7. VUE 3 : ESPACE DIRECTEUR DE THÈSE (ENCADRANT)
+// ============================================================================
+
+interface VueDirecteurTheseProps {
+  sujets: SujetThese[];
+  candidatures: Candidature[];
+  onUpdateStatut: (id: string, statut: StatutCandidature, extra?: Partial<Candidature>) => void;
+  onAjouterSujet: (sujet: SujetThese) => void;
+}
+
+const VueDirecteurThese: React.FC<VueDirecteurTheseProps> = ({
+  sujets,
+  candidatures,
+  onUpdateStatut,
+  onAjouterSujet
+}) => {
+  const [tab, setTab] = useState<'CANDIDATURES' | 'MES_SUJETS'>('CANDIDATURES');
+  const [candidatureEnExamen, setCandidatureEnExamen] = useState<Candidature | null>(null);
+
+  // Formulaire d'instruction Étape 1
+  const [dateConvocation, setDateConvocation] = useState('');
+  const [noteOral, setNoteOral] = useState<number | ''>('');
+  const [resultatEtape1, setResultatEtape1] = useState<'LISTE_PRINCIPALE' | 'LISTE_ATTENTE' | 'REJETE'>('LISTE_PRINCIPALE');
+  const [motifRefus, setMotifRefus] = useState('');
+  const [motifCorrection, setMotifCorrection] = useState('');
+
+  // Nouveau sujet modal state
+  const [nouveauTitre, setNouveauTitre] = useState('');
+  const [nouveauTheme, setNouveauTheme] = useState('');
+  const [nouveauPlaces, setNouveauPlaces] = useState(1);
+  const [isNouveauOpen, setIsNouveauOpen] = useState(false);
+
+  // Soumission de l'évaluation étape 1
+  const validerInstructionEtape1 = () => {
+    if (!candidatureEnExamen) return;
+
+    if (resultatEtape1 === 'REJETE') {
+      if (!motifRefus.trim()) {
+        alert("Un motif de refus obligatoire doit être consigné.");
+        return;
+      }
+      onUpdateStatut(candidatureEnExamen.id, 'REFUSEE', {
+        etape1: {
+          decideur: 'Pr. Karim EL AMRANI',
+          resultat: 'REJETE',
+          motif_refus: motifRefus,
+          note: noteOral ? Number(noteOral) : undefined
+        }
+      });
+    } else {
+      // LISTE_PRINCIPALE ou LISTE_ATTENTE transmet à l'étape 2 (reste à EN_EXAMEN avec résultat d'étape 1 prêt)
+      onUpdateStatut(candidatureEnExamen.id, 'EN_EXAMEN', {
+        etape1: {
+          decideur: 'Pr. Karim EL AMRANI',
+          resultat: resultatEtape1,
+          date_convocation: dateConvocation || undefined,
+          note: noteOral ? Number(noteOral) : undefined
+        }
+      });
+    }
+
+    setCandidatureEnExamen(null);
+  };
+
+  return (
+    <div className="space-y-6">
+      
+      {/* Header Encadrant */}
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">Espace Directeur de Thèse</h1>
+          <p className="text-xs text-slate-500">Pr. Karim EL AMRANI &bull; Laboratoire d'Informatique et Systèmes (LIS)</p>
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={() => setTab('CANDIDATURES')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${tab === 'CANDIDATURES' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}`}
+          >
+            Candidatures Reçues
+          </button>
+          <button
+            onClick={() => setTab('MES_SUJETS')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${tab === 'MES_SUJETS' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}`}
+          >
+            Gestion des Sujets ({sujets.length})
+          </button>
+        </div>
+      </div>
+
+      {/* TAB : CANDIDATURES REÇUES & SINGLE-SCREEN DIALOG */}
+      {tab === 'CANDIDATURES' && (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+            <h2 className="text-xs font-bold text-slate-700 uppercase">Dossiers candidats assignés</h2>
+            <span className="text-xs text-slate-500">{candidatures.length} candidature(s)</span>
+          </div>
+
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+              <tr>
+                <th className="py-3 px-4">Candidat</th>
+                <th className="py-3 px-4">CNE</th>
+                <th className="py-3 px-4">Sujet Choisi (P1)</th>
+                <th className="py-3 px-4">Statut Actuel</th>
+                <th className="py-3 px-4">Étape 1 Encadrant</th>
+                <th className="py-3 px-4 text-right">Instruction</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {candidatures.map((c) => (
+                <tr key={c.id} className="hover:bg-slate-50/50">
+                  <td className="py-3 px-4 font-bold text-slate-900">
+                    {c.candidat_nom} {c.candidat_prenom}
+                  </td>
+                  <td className="py-3 px-4 font-mono text-slate-600">{c.candidat_cne}</td>
+                  <td className="py-3 px-4 text-slate-700 max-w-xs truncate">
+                    {c.choix_sujets[0]?.sujet.titre || "Non spécifié"}
+                  </td>
+                  <td className="py-3 px-4">
+                    <StatutBadge statut={c.statut} />
+                  </td>
+                  <td className="py-3 px-4">
+                    {c.etape1?.resultat ? (
+                      <span className="font-semibold text-blue-700">{c.etape1.resultat} ({c.etape1.note}/20)</span>
+                    ) : (
+                      <span className="text-slate-400 italic">Non instruit</span>
+                    )}
+                  </td>
+                  <td className="py-3 px-4 text-right">
+                    <button
+                      onClick={() => setCandidatureEnExamen(c)}
+                      className="bg-blue-700 hover:bg-blue-800 text-white px-3 py-1.5 rounded-lg font-semibold text-xs transition"
+                    >
+                      Examiner le dossier
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* TAB : GESTION DES SUJETS PROPOSÉS AVEC CHIPS DE VALIDATION */}
+      {tab === 'MES_SUJETS' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-sm font-bold text-slate-900">Sujets soumis aux instances de validation</h2>
+            <button
+              onClick={() => setIsNouveauOpen(true)}
+              className="bg-blue-700 hover:bg-blue-800 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm"
+            >
+              <Plus className="w-4 h-4" /> Proposer un nouveau sujet
+            </button>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                <tr>
+                  <th className="py-3 px-4">Intitulé du Sujet</th>
+                  <th className="py-3 px-4">Thématique</th>
+                  <th className="py-3 px-4">Places</th>
+                  <th className="py-3 px-4">Structure</th>
+                  <th className="py-3 px-4">Centre (CEDoc)</th>
+                  <th className="py-3 px-4">Pôle</th>
+                  <th className="py-3 px-4">Statut Global</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {sujets.map((s) => (
+                  <tr key={s.id} className="hover:bg-slate-50/50">
+                    <td className="py-3 px-4 font-bold text-slate-900 max-w-sm">{s.titre}</td>
+                    <td className="py-3 px-4 text-slate-600">{s.theme}</td>
+                    <td className="py-3 px-4">{s.nombre_places}</td>
+                    <td className="py-3 px-4">
+                      <ValidationPill label="Struct" statut={s.validation_structure} />
+                    </td>
+                    <td className="py-3 px-4">
+                      <ValidationPill label="Centre" statut={s.validation_centre} />
+                    </td>
+                    <td className="py-3 px-4">
+                      <ValidationPill label="Pôle" statut={s.validation_pole} />
+                    </td>
+                    <td className="py-3 px-4 font-semibold text-slate-800">{s.statut}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* SINGLE-SCREEN DIALOG: FICHE D'INSTRUCTION CANDIDAT */}
+      {candidatureEnExamen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            
+            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-base">
+                  Instruction Étape 1 : {candidatureEnExamen.candidat_prenom} {candidatureEnExamen.candidat_nom}
+                </h3>
+                <span className="text-xs text-slate-400">Dossier ID: {candidatureEnExamen.id}</span>
+              </div>
+              <button onClick={() => setCandidatureEnExamen(null)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
+              
+              {/* 1. Prise en charge & Action rapide */}
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <div>
+                  <span className="text-slate-500 font-semibold block">Statut Actuel :</span>
+                  <StatutBadge statut={candidatureEnExamen.statut} />
+                </div>
+
+                {candidatureEnExamen.statut === 'SOUMISE' && (
+                  <button
+                    onClick={() => {
+                      onUpdateStatut(candidatureEnExamen.id, 'EN_EXAMEN');
+                      setCandidatureEnExamen(prev => prev ? { ...prev, statut: 'EN_EXAMEN' } : null);
+                    }}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold shadow-sm"
+                  >
+                    Prendre en charge le dossier (Passer en examen)
+                  </button>
+                )}
+              </div>
+
+              {/* 2. Demande de pièce manquante / Correction */}
+              <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 space-y-2">
+                <h4 className="font-bold text-amber-900 flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" /> Demander une pièce manquante ou correction
+                </h4>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Préciser la pièce manquante ou le motif de rejet partiel..."
+                    value={motifCorrection}
+                    onChange={(e) => setMotifCorrection(e.target.value)}
+                    className="flex-1 px-3 py-1.5 rounded-lg border border-amber-300 text-xs bg-white"
+                  />
+                  <button
+                    onClick={() => {
+                      if (!motifCorrection.trim()) return alert("Précisez le motif.");
+                      onUpdateStatut(candidatureEnExamen.id, 'CORRECTION_DEMANDEE', { motif_correction: motifCorrection });
+                      setCandidatureEnExamen(null);
+                    }}
+                    className="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg font-bold"
+                  >
+                    Notifier le candidat
+                  </button>
+                </div>
+              </div>
+
+              {/* 3. Programmation de l'Entretien & Décision Étape 1 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 rounded-xl border border-slate-200 space-y-3">
+                  <h4 className="font-bold text-slate-900 flex items-center gap-1.5">
+                    <Calendar className="w-4 h-4 text-blue-600" /> Convocation à l'Entretien Oral
+                  </h4>
+                  <div>
+                    <label className="block text-slate-600 font-semibold mb-1">Date et heure prévues :</label>
+                    <input 
+                      type="datetime-local"
+                      value={dateConvocation}
+                      onChange={(e) => setDateConvocation(e.target.value)}
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl border border-slate-200 space-y-3">
+                  <h4 className="font-bold text-slate-900 flex items-center gap-1.5">
+                    <UserCheck className="w-4 h-4 text-blue-600" /> Évaluation &amp; Décision Étape 1
+                  </h4>
+                  
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-slate-600 font-semibold mb-1">Note (/20) :</label>
+                      <input 
+                        type="number"
+                        min="0"
+                        max="20"
+                        step="0.5"
+                        placeholder="Ex: 16.5"
+                        value={noteOral}
+                        onChange={(e) => setNoteOral(e.target.value === '' ? '' : Number(e.target.value))}
+                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-600 font-semibold mb-1">Résultat :</label>
+                      <select
+                        value={resultatEtape1}
+                        onChange={(e) => setResultatEtape1(e.target.value as any)}
+                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 font-semibold"
+                      >
+                        <option value="LISTE_PRINCIPALE">Liste Principale</option>
+                        <option value="LISTE_ATTENTE">Liste d'Attente</option>
+                        <option value="REJETE">Rejeté (Refus)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {resultatEtape1 === 'REJETE' && (
+                    <div>
+                      <label className="block text-rose-700 font-semibold mb-1">Motif obligatoire de rejet :</label>
+                      <textarea
+                        value={motifRefus}
+                        onChange={(e) => setMotifRefus(e.target.value)}
+                        placeholder="Préciser les motivations académiques du rejet..."
+                        className="w-full px-3 py-1.5 rounded-lg border border-rose-300 text-xs"
+                        rows={2}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+            </div>
+
+            <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 flex justify-end gap-3">
+              <button
+                onClick={() => setCandidatureEnExamen(null)}
+                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg font-semibold"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={validerInstructionEtape1}
+                className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg font-bold shadow-sm"
+              >
+                Enregistrer l'évaluation Étape 1
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PROPOSITION DE SUJET */}
+      {isNouveauOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-lg w-full p-6 space-y-4">
+            <h3 className="text-sm font-bold text-slate-900">Proposer un nouveau sujet de thèse</h3>
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="font-semibold block mb-1">Intitulé du sujet</label>
+                <input 
+                  type="text" 
+                  value={nouveauTitre} 
+                  onChange={(e) => setNouveauTitre(e.target.value)}
+                  className="w-full p-2 border border-slate-200 rounded-lg" 
+                  placeholder="Ex: Analyse de la résilience énergétique..."
+                />
+              </div>
+              <div>
+                <label className="font-semibold block mb-1">Thématique de recherche</label>
+                <input 
+                  type="text" 
+                  value={nouveauTheme} 
+                  onChange={(e) => setNouveauTheme(e.target.value)}
+                  className="w-full p-2 border border-slate-200 rounded-lg" 
+                  placeholder="Ex: Systèmes Embarqués"
+                />
+              </div>
+              <div>
+                <label className="font-semibold block mb-1">Nombre de places ouvertes</label>
+                <input 
+                  type="number" 
+                  min="1" 
+                  max="3" 
+                  value={nouveauPlaces} 
+                  onChange={(e) => setNouveauPlaces(Number(e.target.value))}
+                  className="w-full p-2 border border-slate-200 rounded-lg" 
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setIsNouveauOpen(false)} className="px-3 py-1.5 bg-slate-100 rounded text-xs font-semibold">Annuler</button>
+              <button 
+                onClick={() => {
+                  if (!nouveauTitre) return;
+                  onAjouterSujet({
+                    id: `s-${Date.now()}`,
+                    titre: nouveauTitre,
+                    description: "Descriptif en cours de validation par la structure.",
+                    nombre_places: nouveauPlaces,
+                    statut: 'PROPOSE',
+                    propose_par: 'Pr. Karim EL AMRANI',
+                    encadrant_id: 'dt-1',
+                    structure: 'Laboratoire d\'Informatique et Systèmes (LIS)',
+                    etablissement: 'Faculté des Sciences Dhar El Mahraz',
+                    annee: 2026,
+                    theme: nouveauTheme || 'Génie Informatique',
+                    validation_structure: 'EN_ATTENTE',
+                    validation_centre: 'EN_ATTENTE',
+                    validation_pole: 'EN_ATTENTE'
+                  });
+                  setIsNouveauOpen(false);
+                  setNouveauTitre('');
+                }}
+                className="px-3 py-1.5 bg-blue-700 text-white rounded text-xs font-bold"
+              >
+                Soumettre le sujet
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};
+
+// ============================================================================
+// 8. VUE 4 : ESPACE DIRECTEUR DE STRUCTURE (Étape 2 & Validation Sujets)
+// ============================================================================
+
+interface VueDirecteurStructureProps {
+  sujets: SujetAlice[];
+  candidatures: Candidature[];
+  onValiderSujet: (id: string) => void;
+  onDecisionEtape2: (candidatureId: string, resultat: 'FAVORABLE' | 'DEFAVORABLE', motif: string) => void;
+}
+type SujetAlice = SujetThese;
+
+const VueDirecteurStructure: React.FC<VueDirecteurStructureProps> = ({
+  sujets,
+  candidatures,
+  onValiderSujet,
+  onDecisionEtape2
+}) => {
+  const [modalDecision, setModalDecision] = useState<{
+    candidatureId: string;
+    decision: 'FAVORABLE' | 'DEFAVORABLE';
+  } | null>(null);
+  const [motifStructure, setMotifStructure] = useState('');
+
+  // Candidatures transmises à l'étape 2 (ayant validé l'étape 1 en LP ou LA)
+  const candidaturesEtape2 = candidatures.filter(c => 
+    c.statut === 'EN_EXAMEN' && 
+    c.etape1 && 
+    ['LISTE_PRINCIPALE', 'LISTE_ATTENTE'].includes(c.etape1.resultat || '')
+  );
+
+  const sujetsEnAttente = sujets.filter(s => s.validation_structure === 'EN_ATTENTE');
+
+  return (
+    <div className="space-y-6">
+      
+      {/* Header Structure */}
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+        <h1 className="text-xl font-bold text-slate-900">Espace Directeur de Structure de Recherche</h1>
+        <p className="text-xs text-slate-500">Laboratoire d'Informatique et Systèmes (LIS) &bull; Validation finale des admissions et accréditation des sujets</p>
+      </div>
+
+      {/* SECTION 1: VALIDATION DES SUJETS PROPOSÉS */}
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">1. Validation Structure des Sujets de Thèse Proposés</h2>
+            <p className="text-xs text-slate-500">Validation préalable requise avant publication au catalogue public.</p>
+          </div>
+          <span className="text-xs font-semibold bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
+            {sujetsEnAttente.length} en attente
+          </span>
+        </div>
+
+        {sujetsEnAttente.length === 0 ? (
+          <div className="text-center py-6 text-xs text-slate-400 bg-slate-50 rounded-lg">
+            Tous les sujets de la structure ont été examinés et validés.
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {sujetsEnAttente.map(s => (
+              <div key={s.id} className="py-3 flex items-center justify-between gap-4 text-xs">
+                <div>
+                  <h3 className="font-bold text-slate-900">{s.titre}</h3>
+                  <p className="text-slate-500">{s.propose_par} &bull; Thème : {s.theme} &bull; {s.nombre_places} place(s)</p>
+                </div>
+                <button
+                  onClick={() => onValiderSujet(s.id)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 shadow-sm"
+                >
+                  <Check className="w-3.5 h-3.5" /> Accréditer pour le labo
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* SECTION 2: DÉCISION FINALE ÉTAPE 2 */}
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <div>
+          <h2 className="text-sm font-bold text-slate-900">2. Décision Finale d'Étape 2 pour Inscription</h2>
+          <p className="text-xs text-slate-500">
+            Dossiers ayant reçu un avis favorable (LP ou LA) du directeur de thèse lors de l'étape 1.
+          </p>
+        </div>
+
+        {candidaturesEtape2.length === 0 ? (
+          <div className="text-center py-8 text-xs text-slate-400 bg-slate-50 rounded-lg">
+            Aucun dossier en attente d'arbitrage pour l'étape 2.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-3">Candidat</th>
+                  <th className="py-2.5 px-3">Avis Étape 1</th>
+                  <th className="py-2.5 px-3">Note Entretien</th>
+                  <th className="py-2.5 px-3">Sujet Retenu</th>
+                  <th className="py-2.5 px-3 text-right">Décision Structure</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {candidaturesEtape2.map(cand => (
+                  <tr key={cand.id} className="hover:bg-slate-50">
+                    <td className="py-3 px-3 font-bold text-slate-900">{cand.candidat_nom} {cand.candidat_prenom}</td>
+                    <td className="py-3 px-3 font-semibold text-blue-700">{cand.etape1?.resultat}</td>
+                    <td className="py-3 px-3 font-semibold">{cand.etape1?.note} / 20</td>
+                    <td className="py-3 px-3 max-w-xs truncate">{cand.choix_sujets[0]?.sujet.titre}</td>
+                    <td className="py-3 px-3 text-right space-x-2">
+                      <button
+                        onClick={() => setModalDecision({ candidatureId: cand.id, decision: 'FAVORABLE' })}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded text-xs font-bold"
+                      >
+                        Favorable (Accepter)
+                      </button>
+                      <button
+                        onClick={() => setModalDecision({ candidatureId: cand.id, decision: 'DEFAVORABLE' })}
+                        className="bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 rounded text-xs font-bold"
+                      >
+                        Défavorable (Refuser)
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* MODAL DE DÉCISION AVEC MOTIF OBLIGATOIRE */}
+      {modalDecision && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4">
+            <h3 className="font-bold text-slate-900 text-sm">
+              Confirmation de décision : <span className={modalDecision.decision === 'FAVORABLE' ? 'text-emerald-700' : 'text-rose-700'}>{modalDecision.decision}</span>
+            </h3>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Motif officiel obligatoire de la décision :
+              </label>
+              <textarea
+                value={motifStructure}
+                onChange={(e) => setMotifStructure(e.target.value)}
+                placeholder="Consigner l'avis de la commission de structure..."
+                className="w-full text-xs p-2.5 border border-slate-200 rounded-lg"
+                rows={3}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button 
+                onClick={() => setModalDecision(null)}
+                className="px-3 py-1.5 bg-slate-100 text-slate-700 text-xs font-semibold rounded"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => {
+                  if (!motifStructure.trim()) return alert("Le motif de décision est obligatoire.");
+                  onDecisionEtape2(modalDecision.candidatureId, modalDecision.decision, motifStructure);
+                  setModalDecision(null);
+                  setMotifStructure('');
+                }}
+                className={`px-4 py-1.5 text-white text-xs font-bold rounded ${modalDecision.decision === 'FAVORABLE' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'}`}
+              >
+                Confirmer l'arbitrage
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};
+
+// ============================================================================
+// 9. VUE 5 : ESPACE AGENT ADMINISTRATIF (VÉRIFICATION D'IDENTITÉ)
+// ============================================================================
+
+interface VueAgentAdminProps {
+  personnes: PersonneIdentite[];
+  onValiderIdentite: (id: string, statut: 'CONFORME' | 'NON_CONFORME', motif?: string) => void;
+}
+
+const VueAgentAdmin: React.FC<VueAgentAdminProps> = ({
+  personnes,
+  onValiderIdentite
+}) => {
+  const [personneEnExamen, setPersonneEnExamen] = useState<PersonneIdentite | null>(null);
+  const [motifRejet, setMotifRejet] = useState('');
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+        <h1 className="text-xl font-bold text-slate-900">Espace Agent Administratif : Contrôle d'Identité</h1>
+        <p className="text-xs text-slate-500">
+          Vérification manuelle des pièces d'identité scannées vs données déclarées (Contrôle anti-usurpation / CNE unique).
+        </p>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center text-xs">
+          <span className="font-bold text-slate-700">Dossiers d'identité enregistrés</span>
+          <span className="text-slate-500">{personnes.length} candidat(s)</span>
+        </div>
+
+        <table className="w-full text-left text-xs">
+          <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+            <tr>
+              <th className="py-2.5 px-3">Candidat</th>
+              <th className="py-2.5 px-3">Type Pièce</th>
+              <th className="py-2.5 px-3">Numéro Pièce</th>
+              <th className="py-2.5 px-3">CNE</th>
+              <th className="py-2.5 px-3">Statut Vérification</th>
+              <th className="py-2.5 px-3 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {personnes.map(p => (
+              <tr key={p.id} className="hover:bg-slate-50">
+                <td className="py-2.5 px-3 font-bold text-slate-900">{p.nom} {p.prenom}</td>
+                <td className="py-2.5 px-3">{p.type_document_identite}</td>
+                <td className="py-2.5 px-3 font-mono">{p.numero_document_identite}</td>
+                <td className="py-2.5 px-3 font-mono">{p.cne}</td>
+                <td className="py-2.5 px-3">
+                  <span className={`px-2 py-0.5 rounded font-semibold text-[10px] ${
+                    p.statut_identite === 'CONFORME' ? 'bg-emerald-100 text-emerald-800' :
+                    p.statut_identite === 'A_EXAMINER' ? 'bg-amber-100 text-amber-800' :
+                    p.statut_identite === 'NON_CONFORME' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700'
+                  }`}>
+                    {p.statut_identite}
+                  </span>
+                </td>
+                <td className="py-2.5 px-3 text-right">
+                  <button
+                    onClick={() => setPersonneEnExamen(p)}
+                    className="bg-blue-700 hover:bg-blue-800 text-white px-3 py-1 rounded text-xs font-semibold"
+                  >
+                    Vérifier la pièce
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* MODAL DE VÉRIFICATION MANUELLE D'IDENTITÉ */}
+      {personneEnExamen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full p-6 space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-bold text-sm text-slate-900">
+                Vérification manuelle de pièce : {personneEnExamen.nom} {personneEnExamen.prenom}
+              </h3>
+              <button onClick={() => setPersonneEnExamen(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 text-xs">
+              <div className="space-y-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <h4 className="font-bold text-slate-800">Données déclarées :</h4>
+                <p>Date de naissance : {personneEnExamen.date_naissance}</p>
+                <p>Lieu : {personneEnExamen.lieu_naissance} ({personneEnExamen.pays})</p>
+                <p>Numéro {personneEnExamen.type_document_identite} : <strong className="font-mono">{personneEnExamen.numero_document_identite}</strong></p>
+                <p>CNE : <strong className="font-mono">{personneEnExamen.cne}</strong></p>
+              </div>
+
+              <div className="bg-slate-100 p-4 rounded-lg flex flex-col items-center justify-center text-center text-slate-500 border border-dashed border-slate-300">
+                <FileText className="w-10 h-10 text-slate-400 mb-1" />
+                <span className="font-semibold text-slate-700">{personneEnExamen.scan_url}</span>
+                <span className="text-[10px] text-slate-400 mt-1">Aperçu du scan officiel CIN/Passeport</span>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <label className="text-xs font-semibold text-slate-700">Motif en cas de non-conformité :</label>
+              <input
+                type="text"
+                placeholder="Ex: Document flou ou numéro CIN discordant..."
+                value={motifRejet}
+                onChange={(e) => setMotifRejet(e.target.value)}
+                className="w-full text-xs p-2 border border-slate-200 rounded-lg"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <button
+                onClick={() => {
+                  if (!motifRejet.trim()) return alert("Veuillez saisir un motif de non-conformité.");
+                  onValiderIdentite(personneEnExamen.id, 'NON_CONFORME', motifRejet);
+                  setPersonneEnExamen(null);
+                  setMotifRejet('');
+                }}
+                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs font-bold"
+              >
+                Rejeter (Non conforme)
+              </button>
+              <button
+                onClick={() => {
+                  onValiderIdentite(personneEnExamen.id, 'CONFORME');
+                  setPersonneEnExamen(null);
+                }}
+                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold"
+              >
+                Valider (Conforme)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};
+
+// ============================================================================
+// 10. VUE 6 : ESPACE ADMINISTRATEUR ED (CAMPAGNES & DATES)
+// ============================================================================
+
+interface VueAdminEDProps {
+  campagneVersion: VersionCampagne;
+  onCreerNouvelleVersion: (version: VersionCampagne) => void;
+}
+
+const VueAdminED: React.FC<VueAdminEDProps> = ({
+  campagneVersion,
+  onCreerNouvelleVersion
+}) => {
+  const [modalVersionOpen, setModalVersionOpen] = useState(false);
+  const [nvlDateCloture, setNvlDateCloture] = useState(campagneVersion.date_cloture);
+  const [motifModification, setMotifModification] = useState('');
+
+  const appliquerNouvelleVersion = () => {
+    if (!motifModification.trim()) {
+      alert("Le motif de modification de la version de campagne est STRICTEMENT OBLIGATOIRE.");
+      return;
+    }
+
+    const nvl: VersionCampagne = {
+      ...campagneVersion,
+      id: `v-2026-${Date.now()}`,
+      date_cloture: nvlDateCloture,
+      date_modification: new Date().toISOString().split('T')[0],
+      motif_modification: motifModification,
+      modifie_par: 'Admin CEDoc (Conseil Scientifique)'
+    };
+
+    onCreerNouvelleVersion(nvl);
+    setModalVersionOpen(false);
+    setMotifModification('');
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">Espace Administrateur CEDoc : Gestion des Campagnes</h1>
+          <p className="text-xs text-slate-500">Paramétrage institutionnel, calendrier officiel et versionnement des dates</p>
+        </div>
+        <button
+          onClick={() => setModalVersionOpen(true)}
+          className="bg-blue-700 hover:bg-blue-800 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow"
+        >
+          <Calendar className="w-4 h-4" /> Modifier les dates officielles (Nouvelle Version)
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+          <h2 className="text-sm font-bold text-slate-900">Version Actuelle de la Campagne</h2>
+          <div className="space-y-2 text-xs">
+            <div className="flex justify-between py-1 border-b">
+              <span className="text-slate-500">Année universitaire :</span>
+              <span className="font-bold">{campagneVersion.annee_universitaire}</span>
+            </div>
+            <div className="flex justify-between py-1 border-b">
+              <span className="text-slate-500">Date d'ouverture :</span>
+              <span className="font-semibold">{campagneVersion.date_ouverture}</span>
+            </div>
+            <div className="flex justify-between py-1 border-b">
+              <span className="text-slate-500">Date de clôture :</span>
+              <span className="font-bold text-rose-700">{campagneVersion.date_cloture}</span>
+            </div>
+            <div className="flex justify-between py-1 border-b">
+              <span className="text-slate-500">Dernière révision :</span>
+              <span>{campagneVersion.date_modification}</span>
+            </div>
+            <div className="pt-2">
+              <span className="text-slate-500 block mb-1">Motif de la révision en vigueur :</span>
+              <p className="p-2.5 bg-slate-50 rounded border border-slate-200 text-slate-700 font-medium">
+                {campagneVersion.motif_modification}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+          <h2 className="text-sm font-bold text-slate-900">Paramètres Nationaux &amp; CEDoc</h2>
+          <div className="space-y-3 text-xs">
+            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center">
+              <div>
+                <span className="font-bold text-slate-900 block">Nombre max de sujets par candidat</span>
+                <span className="text-slate-500 text-[11px]">Choix priorisés ordonnés (P1, P2, P3)</span>
+              </div>
+              <span className="font-bold text-base text-blue-700 bg-blue-50 px-3 py-1 rounded">3</span>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center">
+              <div>
+                <span className="font-bold text-slate-900 block">Dépôt Liste Principale (LP)</span>
+                <span className="text-slate-500 text-[11px]">Délai accordé aux admis pour inscription</span>
+              </div>
+              <span className="font-semibold text-slate-700">10 jours ouvrés</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* MODAL DE NOUVELLE VERSION DE CAMPAGNE AVEC MOTIF OBLIGATOIRE */}
+      {modalVersionOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4">
+            <h3 className="font-bold text-slate-900 text-sm">
+              Créer une nouvelle version de calendrier
+            </h3>
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold mb-1">Nouvelle date de clôture :</label>
+                <input
+                  type="date"
+                  value={nvlDateCloture}
+                  onChange={(e) => setNvlDateCloture(e.target.value)}
+                  className="w-full p-2 border border-slate-200 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1 text-slate-800">
+                  Motif officiel de modification <span className="text-rose-600">* (Obligatoire)</span> :
+                </label>
+                <textarea
+                  value={motifModification}
+                  onChange={(e) => setMotifModification(e.target.value)}
+                  placeholder="Ex: Prorogation exceptionnelle accordée suite à la délibération du Conseil de l'Université..."
+                  className="w-full p-2.5 border border-slate-200 rounded-lg"
+                  rows={3}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <button 
+                onClick={() => setModalVersionOpen(false)}
+                className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded text-xs font-semibold"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={appliquerNouvelleVersion}
+                className="px-4 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded text-xs font-bold shadow-sm"
+              >
+                Publier la nouvelle version
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};

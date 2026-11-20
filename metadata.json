@@ -1,0 +1,6 @@
+{
+  "name": "USMBA Doctorat - Gestion des Candidatures",
+  "description": "Portail officiel de gestion des candidatures au cycle doctoral de l'Université Sidi Mohamed Ben Abdellah (CEDoc USMBA Fès).",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
